@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:context="http://www.springframework.org/schema/context"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans    
+                           http://www.springframework.org/schema/beans/spring-beans.xsd 
+                           http://www.springframework.org/schema/context  
+                           http://www.springframework.org/schema/context/spring-context.xsd 
+                        ">
+
+	<!-- JNDI Environment Template -->
+	<bean id="jmsJndiTemplate" class="org.springframework.jndi.JndiTemplate">
+		<property name="environment">
+			<props>
+				<prop key="java.naming.factory.initial">com.sun.jndi.ldap.LdapCtxFactory</prop>
+				<prop key="java.naming.provider.url">ldap://${jms.ldap.server.host}:${jms.ldap.server.port}/dc=${jms.ldap.server.basedn}
+				</prop>
+				<prop key="java.naming.security.authentication">simple</prop>
+				<prop key="java.naming.security.principal">cn=${jms.ldap.server.security.usr},ou=serviceusers,dc=${jms.ldap.server.basedn}
+				</prop>
+				<prop key="java.naming.security.credentials">${jms.ldap.server.security.pwd}</prop>
+			</props>
+		</property>
+	</bean>
+	
+		<!-- JMS Queue Connection Factory -->
+	<bean id="wmqConnectionFactory" class="org.springframework.jndi.JndiObjectFactoryBean">
+		<property name="jndiTemplate" ref="jmsJndiTemplate" />
+		<property name="jndiName" value="cn=${jms.jndiname.wmqconnectionfactory}" />
+		<property name="expectedType" value="javax.jms.ConnectionFactory" />
+		<property name="cache" value="false" />
+	</bean>
+	
+	<bean id="jmsTransactionManager"
+		class="org.springframework.jms.connection.JmsTransactionManager">
+		<property name="connectionFactory" ref="springJmsConnectionFactory" />
+	</bean>
+	
+	<bean
+		class="org.springframework.jms.connection.UserCredentialsConnectionFactoryAdapter"
+		id="userCredentitialConnFactory">
+		<property name="targetConnectionFactory" ref="wmqConnectionFactory" />
+		<property name="username" value="${jms.wmq.credentials.usr}" />
+		<property name="password" value="${jms.wmq.credentials.pwd}" />
+	</bean>
+
+	<bean id="springJmsConnectionFactory"
+		class="org.springframework.jms.connection.SingleConnectionFactory" primary="true">
+		<property name="targetConnectionFactory" ref="userCredentitialConnFactory" />
+		<property name="clientId" value="${jms.wmq.clientid}" />
+		<property name="reconnectOnException" value="true" />
+	</bean>
+
+	<bean id="jmsContainerActivity"
+		class="org.springframework.jms.listener.DefaultMessageListenerContainer">
+		<property name="messageListener" ref="messageListener" />
+		<property name="connectionFactory" ref="springJmsConnectionFactory" />
+		<property name="transactionManager" ref="jmsTransactionManager" />
+		<property name="clientId" value="crmServiceTads" />
+		<property name="sessionTransacted" value="true" />
+		<property name="maxConcurrentConsumers" value="1" />
+		<property name="receiveTimeout" value="10000" />
+		<property name="destinationName" value="QL.CRM.ACTIVITI_ACTIVITY.REQUEST" />
+	</bean>
+
+	<bean id="messageListener" class="org.springframework.jms.listener.adapter.MessageListenerAdapter">
+	    <constructor-arg ref="receiver" />
+	</bean>
+
+	<bean id="receiver" class="lt.ezz.Receiver" />
+	
+
+</beans>
